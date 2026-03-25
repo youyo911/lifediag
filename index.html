@@ -475,29 +475,95 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
         </div>
         <div style="font-size:11px;color:var(--ink-m);margin-top:4px;margin-left:30px;padding-left:8px">子ども・親・家族への仕送り・援助など</div>
 
-        <!-- 子ども費用テンプレ -->
-        <div id="child-template-block" style="margin-top:10px;margin-left:0;border-top:1px solid var(--border);padding-top:10px">
+        <!-- 子ども教育費テンプレ -->
+        <div id="edu-block" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:13px;font-weight:700;color:var(--ink)">👶 子ども費用</span>
+            <span style="font-size:13px;font-weight:700;color:var(--ink)">🎓 子どもの教育費</span>
             <div style="display:flex;gap:6px">
-              <button id="ct-yes" class="tog-btn" onclick="setChildTemplate(true)" style="font-size:12px;padding:4px 12px">あり</button>
-              <button id="ct-no"  class="tog-btn on" onclick="setChildTemplate(false)" style="font-size:12px;padding:4px 12px">なし</button>
+              <button id="edu-yes" class="tog-btn" onclick="eduSet(true)"  style="font-size:12px;padding:4px 12px">設定する</button>
+              <button id="edu-no"  class="tog-btn on" onclick="eduSet(false)" style="font-size:12px;padding:4px 12px">設定しない</button>
             </div>
           </div>
-          <div style="font-size:11px;color:var(--ink-m);margin-bottom:8px">子どもがいる場合は、年齢帯ごとの目安から費用を設定できます</div>
+          <div style="font-size:11px;color:var(--ink-m);margin-bottom:8px">現在の学年から高校まで自動計算。大学は任意で追加できます。</div>
+          <div id="edu-main" style="display:none">
 
-          <!-- 子ども追加エリア（あり選択後に表示） -->
-          <div id="ct-children-area" style="display:none">
-            <div id="ct-children-list" style="display:flex;flex-direction:column;gap:10px"></div>
-            <button onclick="ctAddChild()" style="margin-top:8px;width:100%;background:var(--bg);border:1.5px dashed var(--border);border-radius:10px;padding:8px;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer">＋ 子どもを追加</button>
-            <div id="ct-total-block" style="display:none;margin-top:10px;background:var(--accent-l);border-radius:10px;padding:10px 14px">
-              <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:4px">子ども費用合計</div>
-              <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:var(--accent)">
-                <span>年額：<span id="ct-total-year">0</span>万円</span>
-                <span>月換算：<span id="ct-total-month">0</span>万円/月</span>
-              </div>
-              <div style="font-size:11px;color:var(--ink-m);margin-top:4px">※ 支出合計に自動反映されます</div>
+            <!-- 現在の段階 -->
+            <div class="dfield-row mt8">
+              <span style="font-size:12px;color:var(--ink-m);font-weight:600">現在の段階</span>
+              <select id="edu-stage" class="iselect" style="font-size:13px;margin-top:4px" onchange="eduStageChange()">
+                <option value="">選択してください</option>
+                <option value="幼稚園">幼稚園</option>
+                <option value="小学生">小学生</option>
+                <option value="中学生">中学生</option>
+                <option value="高校生">高校生</option>
+                <option value="大学生">大学生</option>
+              </select>
             </div>
+
+            <!-- 現在の学年 -->
+            <div id="edu-grade-block" style="display:none;margin-top:8px">
+              <span style="font-size:12px;color:var(--ink-m);font-weight:600">現在の学年</span>
+              <select id="edu-grade" class="iselect" style="font-size:13px;margin-top:4px" onchange="eduGradeChange()">
+              </select>
+            </div>
+
+            <!-- 高校区分（高校生以下の場合） -->
+            <div id="edu-hs-block" style="display:none;margin-top:8px">
+              <span style="font-size:12px;color:var(--ink-m);font-weight:600">高校の種別（予定）</span>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <button id="edu-hs-pub" class="tog-btn" onclick="eduHsSet('公立')" style="flex:1;font-size:12px">公立</button>
+                <button id="edu-hs-pri" class="tog-btn" onclick="eduHsSet('私立')" style="flex:1;font-size:12px">私立</button>
+              </div>
+              <div id="edu-hs-detail" style="display:none;margin-top:8px;background:var(--accent-l);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px">高校の費用（参考）</div>
+                <div style="font-size:11px;color:var(--ink-m);margin-bottom:6px">残り <strong id="edu-hs-years">—</strong> 年間｜参考年額：<strong id="edu-hs-ref">—</strong> 万円/年</div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="font-size:12px;color:var(--ink-m)">年額</span>
+                  <input type="text" inputmode="numeric" id="edu-hs-amt" style="width:90px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:14px;font-weight:700;color:var(--accent);text-align:right" oninput="eduCalc()">
+                  <span style="font-size:12px;color:var(--ink-m)">万円/年</span>
+                </div>
+                <div style="font-size:10px;color:var(--ink-l);margin-top:4px">参考費用を初期値にしています。実際の想定に合わせて修正してください。</div>
+              </div>
+            </div>
+
+            <!-- 大学進学（大学生以外） -->
+            <div id="edu-uni-q-block" style="display:none;margin-top:10px">
+              <span style="font-size:12px;color:var(--ink-m);font-weight:600">大学進学</span>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <button id="edu-uni-yes" class="tog-btn" onclick="eduUniSet(true)"  style="flex:1;font-size:12px">進学する</button>
+                <button id="edu-uni-no"  class="tog-btn" onclick="eduUniSet(false)" style="flex:1;font-size:12px">進学しない</button>
+              </div>
+            </div>
+
+            <!-- 大学区分 -->
+            <div id="edu-uni-block" style="display:none;margin-top:8px">
+              <span style="font-size:12px;color:var(--ink-m);font-weight:600">大学の種別</span>
+              <select id="edu-uni-type" class="iselect" style="font-size:13px;margin-top:4px" onchange="eduUniTypeChange()">
+                <option value="">選択してください</option>
+                <option value="国公立_文系">国公立 文系</option>
+                <option value="国公立_理系">国公立 理系</option>
+                <option value="私立_文系">私立 文系</option>
+                <option value="私立_理系">私立 理系</option>
+              </select>
+              <div id="edu-uni-detail" style="display:none;margin-top:8px;background:var(--accent-l);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px">大学の費用（参考）</div>
+                <div style="font-size:11px;color:var(--ink-m);margin-bottom:6px">残り <strong id="edu-uni-years">—</strong> 年間｜参考年額：<strong id="edu-uni-ref">—</strong> 万円/年</div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="font-size:12px;color:var(--ink-m)">年額</span>
+                  <input type="text" inputmode="numeric" id="edu-uni-amt" style="width:90px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:14px;font-weight:700;color:var(--accent);text-align:right" oninput="eduCalc()">
+                  <span style="font-size:12px;color:var(--ink-m)">万円/年</span>
+                </div>
+                <div style="font-size:10px;color:var(--ink-l);margin-top:4px">参考費用を初期値にしています。実際の想定に合わせて修正してください。<br>大学は自宅か下宿かで実費が変わります。</div>
+              </div>
+            </div>
+
+            <!-- 合計表示 -->
+            <div id="edu-total-block" style="display:none;margin-top:10px;background:var(--green-l);border-radius:10px;padding:10px 14px">
+              <div style="font-size:11px;color:var(--green);font-weight:700;margin-bottom:4px">教育費 月換算合計（支出合計に反映）</div>
+              <div style="font-size:16px;font-weight:700;color:var(--green)"><span id="edu-total-month">0</span> 万円/月</div>
+              <div id="edu-total-detail" style="font-size:11px;color:var(--ink-m);margin-top:4px"></div>
+            </div>
+
           </div>
         </div>
 
@@ -594,6 +660,30 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       <div class="subtot" style="border:1.5px solid var(--accent);margin-top:4px"><span class="subtot-lbl" style="font-weight:700;color:var(--ink)">毎月支出合計</span><span class="subtot-val" id="monthly-total" style="color:var(--accent)">0 円/月</span></div>
       <div class="subtot"><span class="subtot-lbl">年間支出合計</span><span class="subtot-val" id="annual-total">0 円/年</span></div>
       <div class="subtot"><span class="subtot-lbl" style="font-weight:700;color:var(--ink)">実質月平均支出</span><span class="subtot-val" id="real-monthly" style="color:var(--accent)">0 円/月</span></div>
+
+      <!-- 確認年齢による収支チェック -->
+      <div style="margin-top:14px;border-top:1.5px solid var(--border);padding-top:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:13px;font-weight:700;color:var(--ink)">年齢別の収支確認</span>
+          <span style="font-size:11px;color:var(--ink-m)">収入の入力が必要です</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:13px;color:var(--ink-m);white-space:nowrap">確認する年齢</span>
+          <input type="text" inputmode="numeric" id="check-age" placeholder="例：65"
+            style="width:70px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:15px;font-weight:700;color:var(--ink);text-align:center"
+            oninput="this.value=this.value.replace(/[^0-9]/g,'');s2calc()">
+          <span style="font-size:13px;color:var(--ink-m)">歳時点</span>
+        </div>
+        <div id="age-check-result" style="display:none">
+          <div class="subtot"><span class="subtot-lbl">その年齢の年間収入</span><span class="subtot-val" id="check-income" style="color:var(--green)">— 円/年</span></div>
+          <div class="subtot" style="margin-top:4px"><span class="subtot-lbl">年間支出合計</span><span class="subtot-val" id="check-spend">— 円/年</span></div>
+          <div class="subtot" style="margin-top:4px;border:2px solid var(--border);border-radius:10px">
+            <span class="subtot-lbl" style="font-weight:700;color:var(--ink)">年間差額</span>
+            <span class="subtot-val" id="check-diff" style="font-size:18px">— 円/年</span>
+          </div>
+          <div id="check-income-note" style="font-size:11px;color:var(--ink-m);margin-top:6px;padding-left:4px"></div>
+        </div>
+      </div>
     </div>
 
   </div></div>
@@ -831,180 +921,216 @@ function getHousingMonthly(){
   return nv('loan')+nv('mgmt');
 }
 
-// ===== 子ども費用テンプレ =====
-const CT_TABLE = {
-  '未就学':          {lite:30,  std:50,  heavy:80},
-  '小学生':          {lite:40,  std:70,  heavy:120},
-  '中学生':          {lite:50,  std:90,  heavy:150},
-  '高校生':          {lite:60,  std:120, heavy:200},
-  '大学生（自宅）':  {lite:100, std:150, heavy:200},
-  '大学生（下宿）':  {lite:180, std:250, heavy:320},
+// ===== 子ども教育費テンプレ =====
+// 参考費用テーブル（万円/年）
+const EDU_HS = { '公立': 50, '私立': 100 };  // 高校年額参考
+const EDU_UNI = {
+  '国公立_文系': 65, '国公立_理系': 75,
+  '私立_文系': 120,  '私立_理系': 150,
 };
-const CT_AGE_OPTIONS = Object.keys(CT_TABLE);
-let ctEnabled = false;
-let ctChildren = [];  // [{age:'', level:'', custom:null}]
-let ctChildCount = 0;
-
-function setChildTemplate(on) {
-  ctEnabled = on;
-  el('ct-yes').classList.toggle('on', on);
-  el('ct-no').classList.toggle('on', !on);
-  el('ct-children-area').style.display = on ? 'block' : 'none';
-  if(on && ctChildren.length === 0) ctAddChild();
-  ctUpdateTotal();
-  s2calc();
-}
-
-function ctAddChild() {
-  ctChildCount++;
-  const idx = ctChildren.length;
-  ctChildren.push({age:'', level:'', custom:null});
-  const list = el('ct-children-list');
-  const div = document.createElement('div');
-  div.id = 'ct-child-'+idx;
-  div.style.cssText = 'background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:12px';
-  div.innerHTML = ctChildHTML(idx);
-  list.appendChild(div);
-  ctUpdateTotal();
-}
-
-function ctChildHTML(idx) {
-  const c = ctChildren[idx];
-  const ageOpts = CT_AGE_OPTIONS.map(a =>
-    `<option value="${a}" ${c.age===a?'selected':''}>${a}</option>`
-  ).join('');
-  const levelBlock = c.age ? `
-    <div id="ct-level-${idx}" style="margin-top:8px">
-      <div style="font-size:11px;color:var(--ink-m);margin-bottom:4px">費用水準</div>
-      <div style="display:flex;gap:6px">
-        ${['軽め','標準','重め'].map(lv=>`
-          <button id="ct-lv-${idx}-${lv}" class="tog-btn${c.level===lv?' on':''}"
-            onclick="ctSetLevel(${idx},'${lv}')"
-            style="flex:1;font-size:12px;padding:5px 0">${lv}</button>
-        `).join('')}
-      </div>
-    </div>` : '';
-  const amountBlock = (c.age && c.level) ? ctAmountBlock(idx) : '';
-  return `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:12px;font-weight:700;color:var(--ink)">子ども ${idx+1}</span>
-      <button onclick="ctRemoveChild(${idx})" style="background:none;border:none;color:var(--ink-l);font-size:16px;cursor:pointer;padding:0">×</button>
-    </div>
-    <div>
-      <div style="font-size:11px;color:var(--ink-m);margin-bottom:4px">年齢帯</div>
-      <select id="ct-age-${idx}" class="iselect" onchange="ctSetAge(${idx},this.value)" style="font-size:13px">
-        <option value="">選択してください</option>${ageOpts}
-      </select>
-    </div>
-    ${levelBlock}
-    ${amountBlock}`;
-}
-
-function ctAmountBlock(idx) {
-  const c = ctChildren[idx];
-  const lvKey = c.level==='軽め'?'lite':c.level==='標準'?'std':'heavy';
-  const suggested = CT_TABLE[c.age][lvKey];
-  const val = c.custom !== null ? c.custom : suggested;
-  return `
-    <div id="ct-amount-${idx}" style="margin-top:8px;background:var(--accent-l);border-radius:8px;padding:10px">
-      <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px">費用目安</div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:11px;color:var(--ink-m)">年額（万円）</span>
-        <input type="text" inputmode="numeric" id="ct-custom-${idx}"
-          value="${val}"
-          style="width:80px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:14px;font-weight:700;color:var(--accent);text-align:right"
-          oninput="ctSetCustom(${idx},this.value)">
-        <span style="font-size:11px;color:var(--ink-m)">万円/年</span>
-        <span style="font-size:12px;color:var(--ink-m)">→ 月換算 <strong>${Math.round(val/12*10)/10}</strong> 万円/月</span>
-      </div>
-      <div style="font-size:10px;color:var(--ink-l);margin-top:4px">目安：${suggested}万円（${c.level}）。金額は自由に修正できます</div>
-    </div>`;
-}
-
-function ctSetAge(idx, age) {
-  ctChildren[idx].age = age;
-  ctChildren[idx].level = '';
-  ctChildren[idx].custom = null;
-  ctRenderChild(idx);
-}
-
-function ctSetLevel(idx, level) {
-  ctChildren[idx].level = level;
-  ctChildren[idx].custom = null;
-  ctRenderChild(idx);
-  ctUpdateTotal();
-  s2calc();
-}
-
-function ctSetCustom(idx, val) {
-  const n = parseFloat(val.replace(/,/g,''));
-  ctChildren[idx].custom = isNaN(n) ? null : n;
-  // 月換算表示を更新
-  const amtDiv = el('ct-amount-'+idx);
-  if(amtDiv) {
-    const v = ctChildren[idx].custom !== null ? ctChildren[idx].custom
-              : (ctChildren[idx].age && ctChildren[idx].level
-                ? CT_TABLE[ctChildren[idx].age][ctChildren[idx].level==='軽め'?'lite':ctChildren[idx].level==='標準'?'std':'heavy']
-                : 0);
-    const strong = amtDiv.querySelector('strong');
-    if(strong) strong.textContent = Math.round(v/12*10)/10;
+// 現在段階から高校まで・大学の残年数計算
+const EDU_GRADES = {
+  '幼稚園': ['年少','年中','年長'],
+  '小学生': ['1年','2年','3年','4年','5年','6年'],
+  '中学生': ['1年','2年','3年'],
+  '高校生': ['1年','2年','3年'],
+  '大学生': ['1年','2年','3年','4年'],
+};
+// 段階ごとの総学年数
+const EDU_TOTAL = { '幼稚園':3, '小学生':6, '中学生':3, '高校生':3, '大学生':4 };
+// 高校までの残り年数（現在段階・学年インデックスから）
+function eduHsRemain(stage, gradeIdx) {
+  if(stage==='大学生') return 0;
+  const stageOrder = ['幼稚園','小学生','中学生','高校生'];
+  const stageIdx = stageOrder.indexOf(stage);
+  // 現在ステージの残り
+  const curRemain = EDU_TOTAL[stage] - gradeIdx;
+  // 以降のステージ（高校まで）
+  let remain = curRemain;
+  if(stageIdx < 3) {
+    for(let i = stageIdx+1; i <= 3; i++) remain += EDU_TOTAL[stageOrder[i]];
   }
-  ctUpdateTotal();
-  s2calc();
+  // 高校生の場合: curRemainがそのまま高校残り
+  if(stage==='高校生') return curRemain;
+  // 高校生でない場合: 高校3年分を足した全体 - 非高校分
+  // 実際の高校残り = 3年（高校は必ず全3年）
+  // ※ HS residualは常に3（高校生を除く）
+  return 3; // 高校は3年間固定で費用計算
+}
+// 大学の残り年数
+function eduUniRemain(stage, gradeIdx) {
+  if(stage==='大学生') return EDU_TOTAL['大学生'] - gradeIdx;
+  return 4; // 大学4年間
 }
 
-function ctRemoveChild(idx) {
-  ctChildren.splice(idx, 1);
-  const list = el('ct-children-list');
-  list.innerHTML = '';
-  ctChildren.forEach((_,i) => {
-    const div = document.createElement('div');
-    div.id = 'ct-child-'+i;
-    div.style.cssText = 'background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:12px';
-    div.innerHTML = ctChildHTML(i);
-    list.appendChild(div);
-  });
-  ctChildCount = ctChildren.length;
-  ctUpdateTotal();
-  s2calc();
+let eduEnabled = false;
+let eduState = { stage:'', gradeIdx:-1, hsType:'', uniGo:null, uniType:'', hsAmt:0, uniAmt:0 };
+
+function eduSet(on) {
+  eduEnabled = on;
+  el('edu-yes').classList.toggle('on', on);
+  el('edu-no').classList.toggle('on', !on);
+  el('edu-main').style.display = on ? 'block' : 'none';
+  if(!on) { eduState = { stage:'', gradeIdx:-1, hsType:'', uniGo:null, uniType:'', hsAmt:0, uniAmt:0 }; }
+  eduCalc(); s2calc();
 }
 
-function ctRenderChild(idx) {
-  const div = el('ct-child-'+idx);
-  if(div) div.innerHTML = ctChildHTML(idx);
+function eduStageChange() {
+  const stage = el('edu-stage').value;
+  eduState.stage = stage;
+  eduState.gradeIdx = -1;
+  eduState.hsType = '';
+  eduState.uniGo = null;
+  eduState.uniType = '';
+  // 学年選択肢を更新
+  const gradeEl = el('edu-grade');
+  gradeEl.innerHTML = '<option value="">選択</option>';
+  if(stage && EDU_GRADES[stage]) {
+    EDU_GRADES[stage].forEach((g,i) => {
+      gradeEl.innerHTML += `<option value="${i}">${g}</option>`;
+    });
+  }
+  el('edu-grade-block').style.display = stage ? 'block' : 'none';
+  el('edu-hs-block').style.display = 'none';
+  el('edu-hs-detail').style.display = 'none';
+  el('edu-uni-q-block').style.display = 'none';
+  el('edu-uni-block').style.display = 'none';
+  el('edu-uni-detail').style.display = 'none';
+  el('edu-total-block').style.display = 'none';
+  // 大学生の場合は大学区分へ直行
+  if(stage==='大学生') {
+    el('edu-hs-block').style.display = 'none';
+    el('edu-uni-q-block').style.display = 'none';
+    el('edu-uni-block').style.display = 'block';
+  }
+  eduCalc();
 }
 
-function ctGetTotalYear() {
-  if(!ctEnabled) return 0;
-  return ctChildren.reduce((sum, c) => {
-    if(!c.age || !c.level) return sum;
-    const lvKey = c.level==='軽め'?'lite':c.level==='標準'?'std':'heavy';
-    const val = c.custom !== null ? c.custom : CT_TABLE[c.age][lvKey];
-    return sum + val;
-  }, 0);
+function eduGradeChange() {
+  const gradeIdx = parseInt(el('edu-grade').value);
+  if(isNaN(gradeIdx)) return;
+  eduState.gradeIdx = gradeIdx;
+  const stage = eduState.stage;
+  // 高校区分を表示（高校生以下）
+  if(stage !== '大学生') {
+    el('edu-hs-block').style.display = 'block';
+    el('edu-hs-detail').style.display = eduState.hsType ? 'block' : 'none';
+  }
+  // 大学進学を表示（高校生以下）
+  const showUniQ = (stage !== '大学生');
+  el('edu-uni-q-block').style.display = showUniQ ? 'block' : 'none';
+  eduCalc();
 }
 
-function ctUpdateTotal() {
-  const totalYear = ctGetTotalYear();
-  const totalBlock = el('ct-total-block');
-  if(!totalBlock) return;
-  if(ctEnabled && ctChildren.length > 0 && totalYear > 0) {
-    totalBlock.style.display = 'block';
-    el('ct-total-year').textContent = totalYear;
-    el('ct-total-month').textContent = Math.round(totalYear/12*10)/10;
+function eduHsSet(type) {
+  eduState.hsType = type;
+  el('edu-hs-pub').classList.toggle('on', type==='公立');
+  el('edu-hs-pri').classList.toggle('on', type==='私立');
+  const ref = EDU_HS[type];
+  const years = (eduState.stage && eduState.gradeIdx >= 0)
+    ? (eduState.stage==='高校生' ? EDU_TOTAL['高校生'] - eduState.gradeIdx : 3)
+    : 3;
+  el('edu-hs-years').textContent = years;
+  el('edu-hs-ref').textContent = ref;
+  const amtEl = el('edu-hs-amt');
+  amtEl.value = ref;
+  eduState.hsAmt = ref;
+  el('edu-hs-detail').style.display = 'block';
+  eduCalc();
+}
+
+function eduUniSet(go) {
+  eduState.uniGo = go;
+  el('edu-uni-yes').classList.toggle('on', go===true);
+  el('edu-uni-no').classList.toggle('on', go===false);
+  el('edu-uni-block').style.display = go ? 'block' : 'none';
+  if(!go) { el('edu-uni-detail').style.display='none'; eduState.uniType=''; }
+  eduCalc();
+}
+
+function eduUniTypeChange() {
+  const type = el('edu-uni-type').value;
+  if(!type) return;
+  eduState.uniType = type;
+  const ref = EDU_UNI[type] || 100;
+  const gradeIdx = eduState.gradeIdx >= 0 ? eduState.gradeIdx : 0;
+  const years = eduState.stage==='大学生'
+    ? EDU_TOTAL['大学生'] - gradeIdx
+    : 4;
+  el('edu-uni-years').textContent = years;
+  el('edu-uni-ref').textContent = ref;
+  const amtEl = el('edu-uni-amt');
+  amtEl.value = ref;
+  eduState.uniAmt = ref;
+  el('edu-uni-detail').style.display = 'block';
+  eduCalc();
+}
+
+function eduCalc() {
+  if(!eduEnabled) { el('edu-total-block').style.display='none'; s2calc(); return; }
+  // 入力値を読み取る
+  const hsAmtRaw = parseFloat((el('edu-hs-amt')?.value||'0').replace(/,/g,''))||0;
+  const uniAmtRaw= parseFloat((el('edu-uni-amt')?.value||'0').replace(/,/g,''))||0;
+  eduState.hsAmt  = hsAmtRaw;
+  eduState.uniAmt = uniAmtRaw;
+  // 月換算（高校費用 + 大学費用の加重平均）
+  const stage = eduState.stage;
+  const gradeIdx = eduState.gradeIdx >= 0 ? eduState.gradeIdx : 0;
+  let details = [];
+  let totalMonthly = 0;
+  // 高校費用（大学生以外、かつ種別選択済み）
+  if(stage && stage !== '大学生' && eduState.hsType) {
+    const hsYears = stage==='高校生' ? EDU_TOTAL['高校生'] - gradeIdx : 3;
+    const hsMonthly = eduState.hsAmt / 12;
+    totalMonthly += hsMonthly;
+    details.push(`高校${hsYears}年間 ${eduState.hsAmt}万円/年`);
+  }
+  // 大学費用（大学生、または進学する選択済み）
+  const uniActive = (stage==='大学生') || (eduState.uniGo===true && eduState.uniType);
+  if(uniActive && eduState.uniType) {
+    const uniYears = stage==='大学生' ? EDU_TOTAL['大学生'] - gradeIdx : 4;
+    const uniMonthly = eduState.uniAmt / 12;
+    totalMonthly += uniMonthly;
+    details.push(`大学${uniYears}年間 ${eduState.uniAmt}万円/年`);
+  }
+  if(totalMonthly > 0) {
+    el('edu-total-block').style.display = 'block';
+    el('edu-total-month').textContent = Math.round(totalMonthly*10)/10;
+    el('edu-total-detail').textContent = details.join(' + ');
   } else {
-    totalBlock.style.display = 'none';
+    el('edu-total-block').style.display = 'none';
   }
+  s2calc();
 }
+
+function eduGetMonthly() {
+  if(!eduEnabled) return 0;
+  const hsAmt  = parseFloat((el('edu-hs-amt')?.value||'0').replace(/,/g,''))||0;
+  const uniAmt = parseFloat((el('edu-uni-amt')?.value||'0').replace(/,/g,''))||0;
+  const stage = eduState.stage;
+  const gradeIdx = eduState.gradeIdx >= 0 ? eduState.gradeIdx : 0;
+  let monthly = 0;
+  if(stage && stage !== '大学生' && eduState.hsType) monthly += hsAmt / 12;
+  const uniActive = (stage==='大学生') || (eduState.uniGo===true && eduState.uniType);
+  if(uniActive && eduState.uniType) monthly += uniAmt / 12;
+  return monthly; // 万円/月
+}
+
 
 function s2calc(){
+  // 確認年齢の初期値を現在年齢に（未入力かつフォーカス中でない場合のみ）
+  const _cAgeEl = el('check-age');
+  if(_cAgeEl && _cAgeEl.value === '' && document.activeElement !== _cAgeEl){
+    const _initAge = nv('age');
+    if(_initAge > 0) _cAgeEl.value = _initAge;
+  }
   const housing=getHousingMonthly();
   const familyM=nv('e-family');
   const childAnnual=(typeof ctGetTotalYear==='function')?ctGetTotalYear()*10000:0; // 子ども費用年額（万円→円）
   const basicTotal=nv('e-util')+nv('e-tel')+nv('e-ins')+nv('e-food')+nv('e-dine')+nv('e-daily')+nv('e-fashion')+nv('e-social')+nv('e-sub')+nv('e-family')+nv('e-other');
   const optTotal=nv('e-med')+nv('e-pet')+nv('e-car')+nv('e-edu')+nv('e-care')+nv('e-free');
   const annualSpecial=nv('e-travel')+nv('e-special');
-  const childMonthly = ctGetTotalYear() / 12 * 10000;
+  const childMonthly = (typeof eduGetMonthly==='function' ? eduGetMonthly() : 0) * 10000;
   const monthlyTotal=housing+basicTotal+optTotal+annualSpecial/12+childMonthly;
   const annualTotal=monthlyTotal*12;
   if(el('housing-total')) el('housing-total').textContent=fmt(housing)+'円/月';
@@ -1019,6 +1145,73 @@ function s2calc(){
   el('annual-total').textContent=fmt(annualTotal)+'円/年';
   el('real-monthly').textContent=fmt(annualTotal/12)+'円/月';
   if(el('current-annual-ref')) el('current-annual-ref').textContent=fmt(annualTotal)+'円/年';
+
+  // 確認年齢の収支チェック
+  const checkAgeVal = parseInt((el('check-age')?.value||'').replace(/,/g,''));
+  if(!isNaN(checkAgeVal) && checkAgeVal > 0){
+    const cAge = checkAgeVal;
+    const cIncome = calcIncomeAtAge(cAge);
+    const diff = cIncome - annualTotal;
+    const diffEl = el('check-diff');
+    if(diffEl){
+      diffEl.textContent = (diff>=0?'+':'')+fmt(diff)+'円/年';
+      diffEl.style.color = diff>=0?'var(--green)':'var(--red)';
+    }
+    if(el('check-income')) el('check-income').textContent = fmt(cIncome)+'円/年';
+    if(el('check-spend'))  el('check-spend').textContent  = fmt(annualTotal)+'円/年';
+    if(el('check-income-note')) el('check-income-note').textContent = calcIncomeNote(cAge);
+    if(el('age-check-result')) el('age-check-result').style.display='block';
+  } else {
+    if(el('age-check-result')) el('age-check-result').style.display='none';
+  }
+}
+
+// 指定年齢の年間収入を計算
+function calcIncomeAtAge(age){
+  const curAge    = nv('age') || 45;
+  const retireAge = nv('retire-age') || 60;
+  const monthlyInc = nv('monthly-income');
+  const bonus      = nv('bonus');
+  const raiseRate  = nv('raise-rate') / 100;
+  const extEnabled = document.getElementById('ext-yes')?.classList.contains('on');
+  const extIncome  = nv('ext-income');
+  const extEndAge  = nv('ext-end-age') || retireAge;
+  const partEnabled= document.getElementById('part-yes')?.classList.contains('on');
+  const partIncome = nv('part-income');
+  const partStart  = nv('part-start') || 9999;
+  const partEnd    = nv('part-end')   || 9999;
+  const pensionAge = nv('pension-age') || 65;
+  const pension    = nv('pension') || 0;
+
+  let income = 0;
+  if(age < retireAge){
+    // 現役：昇給率を反映
+    const years = age - curAge;
+    income = (monthlyInc * 12 + bonus) * Math.pow(1 + raiseRate, Math.max(0, years));
+  } else if(extEnabled && age < extEndAge){
+    income = extIncome;
+  }
+  if(partEnabled && partStart <= age && age < partEnd) income += partIncome;
+  if(age >= pensionAge) income += pension;
+  return Math.round(income);
+}
+
+// 収入の内訳メモを生成
+function calcIncomeNote(age){
+  const retireAge = nv('retire-age') || 60;
+  const extEnabled= document.getElementById('ext-yes')?.classList.contains('on');
+  const extEndAge = nv('ext-end-age') || retireAge;
+  const partEnabled=document.getElementById('part-yes')?.classList.contains('on');
+  const partStart = nv('part-start') || 9999;
+  const partEnd   = nv('part-end')   || 9999;
+  const pensionAge= nv('pension-age') || 65;
+  const parts = [];
+  if(age < retireAge)          parts.push('現役収入（昇給率反映）');
+  else if(extEnabled && age < extEndAge) parts.push('延長雇用収入');
+  else                         parts.push('給与収入なし');
+  if(partEnabled && partStart<=age && age<partEnd) parts.push('副業・パート収入含む');
+  if(age >= pensionAge)        parts.push('年金収入含む');
+  return '内訳：' + parts.join(' ＋ ');
 }
 
 // ===== RETIREMENT TAX (退職所得控除) =====
@@ -1063,7 +1256,7 @@ function simulate(){
   const mgmtFee=housingMode==='own'?nv('mgmt'):0;
   const loanAmt=housingMode==='own'?nv('loan'):0;
 
-  const childMonthlyInSim = (typeof ctGetTotalYear === 'function') ? ctGetTotalYear() / 12 * 10000 : 0;
+  const childMonthlyInSim = (typeof eduGetMonthly === 'function') ? eduGetMonthly() * 10000 : 0;
   const basicMnoFamily=nv('e-util')+nv('e-tel')+nv('e-ins')+nv('e-food')+nv('e-dine')+nv('e-daily')+nv('e-fashion')+nv('e-social')+nv('e-sub')+nv('e-other')+childMonthlyInSim;
   const familyM=nv('e-family');
   const familyEndAge=nv('e-family-end')||endAge; // 未入力なら終了年齢まで
@@ -1401,18 +1594,17 @@ function diagnose(){
   const totalScore  = baseSafetyScore; // UI表示用
 
   // =====================================================================
-  // STEP 4: 天気マーク（v6）
+  // STEP 4: 天気マーク（v7）
   // =====================================================================
-  // 主判定軸：「終了時残高 ÷ 終了時点の年間支出」= 余裕年数
-  // 補正軸  ：余裕年数が少ない場合に支出の固定費比率で補正
-  // 重要    ：取り崩し開始の有無だけで天気を悪化させない
+  // 主判定：終了時残高の余裕年数 + 枯渇の有無と不足年数
+  // 原則：足りないケースは明確に危険側へ寄せる
   // =====================================================================
 
-  // 終了時点の年間支出（endRow.spend）と余裕年数
+  // 終了時点の年間支出・余裕年数
   const endSpend = endRow ? endRow.spend : curSpend;
-  const marginYears = endSpend > 0 ? endAsset / endSpend : 0;
+  const marginYears = (!assetDepleted && endSpend > 0) ? endAsset / endSpend : -depletionGapYears;
 
-  // 固定費・変動費の分類（月額ベース）
+  // 固定費・変動費（補正用）
   const fixedMonthly = housingM
     + nv('e-util') + nv('e-tel') + nv('e-ins') + nv('e-sub')
     + familyM + nv('e-car') + nv('e-edu') + nv('e-care');
@@ -1420,42 +1612,39 @@ function diagnose(){
     + nv('e-fashion') + nv('e-social') + nv('e-other')
     + (annualSpecial / 12);
   const totalMonthlyForRatio = fixedMonthly + variableMonthly;
-  const fixedRatio = totalMonthlyForRatio > 0
-    ? fixedMonthly / totalMonthlyForRatio : 0.5;
-  const fixedHeavy    = fixedRatio >= 0.65;  // 固定費多い
-  const variableHeavy = fixedRatio <= 0.40;  // 変動費多い（改善余地あり）
+  const fixedRatio = totalMonthlyForRatio > 0 ? fixedMonthly / totalMonthlyForRatio : 0.5;
+  const fixedHeavy    = fixedRatio >= 0.65;
+  const variableHeavy = fixedRatio <= 0.40;
 
-  // 枯渇・不成立 → 雨（固定）
   let wGrade, wEmoji, wTitle, wTagline, wColorClass, wDetailText;
 
-  if(assetDepleted && depletionGapYears >= 10){
-    // 10年以上前に枯渇
-    wGrade='雨'; wEmoji='🌧️'; wColorClass='w-rain';
-    wTitle='資金計画の再設計をおすすめします';
-    wTagline='老後に向けて設計の見直しが必要です';
-    wDetailText='資産は'+assetLifeAge+'歳頃に枯渇する見込みで、'+endAge+'歳まであと'+(endAge-assetLifeAge)+'年間の不足が生じます。支出を抑えるか収入を補強する設計の見直しが必要です。';
+  // ── 終了年齢まで届かない場合 ────────────────────────────────────
+  if(assetDepleted){
+    if(depletionGapYears <= 2){
+      // 不足1〜2年 → 小雨（あと少しで届く）
+      wGrade='小雨'; wEmoji='🌦️'; wColorClass='w-sprinkle';
+      wTitle='あと少しで届きません';
+      wTagline=endAge+'歳まで残り'+(depletionGapYears)+'年分足りません';
+      wDetailText='資産は'+assetLifeAge+'歳頃に枯渇する見込みです。終了年齢まであと'+depletionGapYears+'年分の不足です。少しの改善で解消できます。';
+    } else {
+      // 不足3年以上 → 雨
+      wGrade='雨'; wEmoji='🌧️'; wColorClass='w-rain';
+      wTitle='資金計画の再設計をおすすめします';
+      wTagline=endAge+'歳まで'+depletionGapYears+'年間不足します';
+      wDetailText='資産は'+assetLifeAge+'歳頃に枯渇する見込みで、'+endAge+'歳まであと'+depletionGapYears+'年間の不足が生じます。支出を抑えるか収入を補強する設計の見直しが必要です。';
+    }
 
-  }else if(assetDepleted || marginYears < 0){
-    // 直前に枯渇 or わずかに不足
-    wGrade='小雨'; wEmoji='🌦️'; wColorClass='w-sprinkle';
-    wTitle='早めの調整が必要です';
-    wTagline='老後の余裕が薄くなっています';
-    wDetailText=assetDepleted
-      ?'資産は'+assetLifeAge+'歳頃に枯渇する見込みです。支出の見直しや収入補強を早めに検討してください。'
-      :'資産はぎりぎり'+endAge+'歳まで続く見込みですが、余裕はほとんどありません。';
-
-  }else if(marginYears >= 7){
-    // 余裕7年以上 → 晴れ系
+  // ── 終了年齢まで届く場合（余裕年数で判定）────────────────────
+  } else if(marginYears >= 7){
+    // 7年以上 → 晴れ系
     const _veryWide = marginYears >= 12 || (marginYears >= 8 && _pensionSurplus);
     if(_veryWide){
       wGrade='強い晴れ'; wEmoji='☀️'; wColorClass='w-sunny2';
-      wTitle = marginYears >= 12
-        ? '老後資金は十分確保できています'
-        : 'かなり安定しています';
+      wTitle = marginYears >= 12 ? '老後資金は十分確保できています' : 'かなり安定しています';
       wTagline='老後まで十分な余裕がある設計です。使える余地もあります';
       wDetailText=endAge+'歳時点でも'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
         +(_pensionSurplus?'年金開始後は収支が黒字化します。':'老後を通じても大きく崩れにくい設計です。');
-    }else{
+    } else {
       wGrade='晴れ'; wEmoji='🌤️'; wColorClass='w-sunny';
       wTitle='おおむね安定しています';
       wTagline='老後まで大きな問題はありません';
@@ -1464,50 +1653,34 @@ function diagnose(){
                          :'取り崩しは発生しますが資産規模に対して管理できる範囲です。');
     }
 
-  }else if(marginYears >= 5){
-    // 余裕5〜7年 → 晴れのち曇り
+  } else if(marginYears >= 5){
+    // 5〜7年 → 晴れのち曇り
     wGrade='晴れのち曇り'; wEmoji='⛅'; wColorClass='w-cloudsun';
     wTitle='おおむね安定していますが、余裕に注意';
-    wTagline='成立していますが、長寿や予定外支出への備えも意識してください';
+    wTagline='余裕は'+Math.round(marginYears*10)/10+'年分。長寿や予定外支出への備えも意識してください';
     wDetailText=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
       +'全体として安定していますが、想定外の支出増や長生きリスクへの余裕はやや限られます。';
 
-  }else if(marginYears >= 3){
-    // 余裕3〜5年 → 固定費比率で補正
-    if(fixedHeavy){
-      // 固定費多い → 下振れに弱い → 曇りのち雨
-      wGrade='曇りのち雨'; wEmoji='🌥️'; wColorClass='w-suncloud';
-      wTitle='固定費の見直しが必要です';
-      wTagline='余裕は'+Math.round(marginYears)+'年分。固定費が多く下振れリスクがあります';
-      wDetailText=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みですが、'
-        +'固定費の割合が高く（'+Math.round(fixedRatio*100)+'%）、想定外の出費に対応しにくい構造です。住居費・保険・教育費など削りにくい固定費の見直しを優先してください。';
-    }else if(variableHeavy){
-      // 変動費多い → 改善余地あり → 曇り（コメントで改善余地強調）
-      wGrade='曇り'; wEmoji='☁️'; wColorClass='w-cloudy';
-      wTitle='見直し余地があります';
-      wTagline='余裕は'+Math.round(marginYears)+'年分。変動費を絞ることで改善できます';
-      wDetailText=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
-        +'外食・娯楽・旅行など変動費の割合が高く（固定費'+Math.round(fixedRatio*100)+'%）、調整しやすい支出が多い構造です。少し絞るだけで余裕が大きく改善します。';
-    }else{
-      // 固定・変動バランス → 曇り
-      wGrade='曇り'; wEmoji='☁️'; wColorClass='w-cloudy';
-      wTitle='見直し余地があります';
-      wTagline='余裕は'+Math.round(marginYears)+'年分。設計の調整が必要な状況です';
-      wDetailText=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
-        +'成立はしていますが余裕は限られており、支出または収入の調整が必要です。';
-    }
+  } else if(marginYears >= 3){
+    // 3〜5年 → 曇り
+    wGrade='曇り'; wEmoji='☁️'; wColorClass='w-cloudy';
+    wTitle='余裕はありますが、見直しを検討してください';
+    wTagline='余裕は'+Math.round(marginYears*10)/10+'年分。設計の調整余地があります';
+    wDetailText=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
+      +(fixedHeavy?'固定費の割合が高く（'+Math.round(fixedRatio*100)+'%）下振れリスクがあります。固定費の見直しを優先してください。'
+        :variableHeavy?'変動費を絞ることで余裕を広げられます。':'支出または収入の調整で余裕を広げられます。');
 
-  }else{
-    // 余裕0〜3年 → 小雨
-    wGrade='小雨'; wEmoji='🌦️'; wColorClass='w-sprinkle';
-    wTitle='早めの調整が必要です';
-    wTagline='余裕は'+Math.round(marginYears)+'年分。余裕が薄い状態です';
-    wDetailText=endAge+'歳時点の残高は'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）とほぼ使い切る形です。'
-      +(fixedHeavy?'固定費の割合が高く調整が難しいため、早めの対策をお勧めします。'
-                  :'変動費を中心に支出を見直すことで余裕を作れます。');
+  } else {
+    // 0〜3年 → 曇りのち雨
+    wGrade='曇りのち雨'; wEmoji='🌥️'; wColorClass='w-suncloud';
+    wTitle='改善しないと余裕がなくなります';
+    wTagline='余裕は'+Math.round(marginYears*10)/10+'年分。早めの対策が必要です';
+    wDetailText=endAge+'歳時点の残高は'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）と余裕がほとんどありません。'
+      +(fixedHeavy?'固定費の割合が高く調整が難しいため、早めの設計見直しをお勧めします。'
+                  :'支出の見直しや収入の補強で改善できます。早めに対策を検討してください。');
   }
 
-    // =====================================================================
+      // =====================================================================
   // 3階層判定ロジック
   // =====================================================================
 
@@ -2153,8 +2326,8 @@ function resetAll(){
     toggleOpt(id);
   });
   // 子ども費用テンプレをリセット
-  ctEnabled=false; ctChildren=[]; ctChildCount=0;
-  setChildTemplate(false);
+  eduEnabled=false; eduState={stage:'',gradeIdx:-1,hsType:'',uniGo:null,uniType:'',hsAmt:0,uniAmt:0};
+  eduSet(false);
   s1calc(); s2calc();
   go(1);
 }
