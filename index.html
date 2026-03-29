@@ -17,8 +17,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>生活設計診断 Ver 1.0</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{
   --bg:#F7F5F2;--surface:#FFFFFF;--surface2:#F0EDE8;
@@ -296,10 +294,10 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
           <input type="text" inputmode="numeric" class="dfield" id="age" placeholder="例：45" oninput="commaField(this);s1calc()">
           <span class="dunit">歳</span></div>
         <div class="ditem mt8"><span class="ditem-icon">🏢</span><span class="ditem-name">定年年齢</span>
-          <input type="text" inputmode="numeric" class="dfield" id="retire-age" placeholder="例：60" oninput="commaField(this);s1calc()">
+          <input type="text" inputmode="numeric" class="dfield" id="retire-age" placeholder="例：60" oninput="ageField(this);s1calc()">
           <span class="dunit">歳</span></div>
         <div class="ditem mt8"><span class="ditem-icon">🏁</span><span class="ditem-name">終了年齢</span>
-          <input type="text" inputmode="numeric" class="dfield" id="end-age" placeholder="例：90" oninput="commaField(this);s1calc()">
+          <input type="text" inputmode="numeric" class="dfield" id="end-age" placeholder="例：90" oninput="ageField(this);s1calc()">
           <span class="dunit">歳</span></div>
       </div>
     </div>
@@ -340,7 +338,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
           <div class="irow" style="margin-bottom:8px"><input type="text" inputmode="numeric" class="ifield-text" id="ext-income" placeholder="例：3,000,000" oninput="commaField(this);s1calc()"><span class="iunit">円 / 年</span></div>
           <div class="hint-box" id="ext-hint">収入を入力すると参考水準が表示されます</div>
           <div class="ditem mt12"><span class="ditem-name">延長雇用の終了年齢</span>
-            <input type="text" inputmode="numeric" class="dfield" id="ext-end-age" placeholder="例：65" oninput="commaField(this);s1calc()">
+            <input type="text" inputmode="numeric" class="dfield" id="ext-end-age" placeholder="例：65" oninput="ageField(this);s1calc()">
             <span class="dunit">歳</span></div>
         </div>
       </div>
@@ -469,7 +467,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
         </div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-left:30px;padding-left:8px">
           <span style="font-size:12px;color:var(--ink-m);white-space:nowrap">終了年齢</span>
-          <input type="text" inputmode="numeric" class="dfield" id="e-family-end" placeholder="例：60" oninput="commaField(this);s2calc()" style="width:80px">
+          <input type="text" inputmode="numeric" class="dfield" id="e-family-end" placeholder="例：60" oninput="ageField(this);s2calc()" style="width:80px">
           <span style="font-size:12px;color:var(--ink-m)">歳まで</span>
           <span style="font-size:11px;color:var(--ink-l)">（未入力=終了年齢まで継続）</span>
         </div>
@@ -774,7 +772,6 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
   <div class="res-body" id="res-body"></div>
   <div class="res-nav"><div class="res-nav-max">
     <button class="btn-sec" onclick="go(1)" style="flex:1">← 修正する</button>
-    <button class="btn-prim" onclick="exportPDF()" style="flex:1" id="pdf-btn">📄 PDF保存</button>
   </div></div>
 </div>
 
@@ -796,6 +793,11 @@ function commaField(el){
     const formatted = Math.round(num).toLocaleString('ja-JP');
     el.value = formatted;
   }
+}
+// 年齢フィールド専用：数字のみ許可、カンマなし、削除・修正できる
+function ageField(el){
+  const v = el.value.replace(/[^0-9]/g,'');
+  if(el.value !== v) el.value = v;
 }
 function nv(id){
   const el=document.getElementById(id);
@@ -1472,110 +1474,172 @@ function diagnose(){
     assetScore + drawAdj + earlyAdj + cashAdj + workAdj));
 
   // =====================================================================
-  // STEP 2: 総合判定 — ガードレール付き
+  // STEP 2〜4: 統一判定ロジック（フローチャート準拠版）
   // =====================================================================
-  // ベース判定
-  let _verdictBase = baseSafetyScore>=65?'ok':baseSafetyScore>=38?'cond':'ng';
+  // 実装原則:
+  //   - 最終判定オブジェクト _judg を1回だけ生成する
+  //   - 天気・見出し・総合判定・コメントは全て _judg から生成
+  //   - 上位判定が下位判定をロックする
+  //   - 不成立時は成立系表示を一切出さない
+  // =====================================================================
 
-  // 上限制約：枯渇が早い場合は強制格下げ
-  if(assetDepleted&&depletionGapYears>=15) _verdictBase='ng';
-  if(assetDepleted&&depletionGapYears>=10&&_verdictBase==='ok') _verdictBase='cond';
+  // ── 固定費・変動費の計算 ─────────────────────────────────────────
+  const fixedMonthly = housingM
+    + nv('e-util') + nv('e-tel') + nv('e-ins') + nv('e-sub')
+    + familyM + nv('e-car') + nv('e-edu') + nv('e-care');
+  const variableMonthly = nv('e-food') + nv('e-dine') + nv('e-daily')
+    + nv('e-fashion') + nv('e-social') + nv('e-other')
+    + (annualSpecial / 12);
+  const totalSpendMonthly = fixedMonthly + variableMonthly;
+  const fixedRatio       = totalSpendMonthly > 0 ? fixedMonthly / totalSpendMonthly : 0.5;
+  const variableRatio    = totalSpendMonthly > 0 ? variableMonthly / totalSpendMonthly : 0.5;
+  const fixedBurdenRatio = annualIncome > 0 ? (fixedMonthly * 12) / annualIncome : 0;
+  // 固定費補正フラグ
+  const fixedPressure = fixedRatio >= 0.60 || fixedBurdenRatio >= 0.45; // 天気1段階悪化
+  const fixedHeavy    = fixedRatio >= 0.50 && fixedBurdenRatio >= 0.35; // コメント追加
+  // 変動費改善余地フラグ
+  const variableHeavy     = variableRatio >= 0.35;
+  const variableVeryHeavy = variableRatio >= 0.45;
 
-  // 下限制約（高安全ケース保護）：終了資産が十分なら 'cond' 以上を保証
-  if(!assetDepleted&&endAssetRatio>=4&&drawRatioW<0.30) {
-    if(_verdictBase==='ng') _verdictBase='cond'; // ng には落とさない
-  }
-  // 終了資産が非常に厚い場合は 'ok' を保証
-  if(!assetDepleted&&endAssetRatio>=6&&drawRatioW<0.40) {
-    _verdictBase='ok';
-  }
-
-  const verdictClass = _verdictBase;
-  const verdictLabel = verdictClass==='ok'?'成立':verdictClass==='cond'?'条件付き成立':'不成立';
-  const verdictBadgeBg  = verdictClass==='ok'?'var(--green-l)':verdictClass==='cond'?'var(--yellow-l)':'var(--red-l)';
-  const verdictBadgeCol = verdictClass==='ok'?'var(--green)':verdictClass==='cond'?'var(--yellow)':'var(--red)';
-
-  // 判定理由文
-  let verdictReason;
-  if(verdictClass==='ok'&&drawStartAge>=endAge){
-    verdictReason=endAge+'歳まで取り崩しなしで資産が維持できる見込みです（残高：'+fmtM(endAsset)+'）';
-  }else if(verdictClass==='ok'){
-    verdictReason=drawStartAge+'歳から年間'+fmtM(avgDeficit)+'の取り崩しが始まりますが、'+endAge+'歳時点で'+fmtM(endAsset)+'が残る見込みです';
-  }else if(!assetDepleted){
-    verdictReason=endAge+'歳時点の残高は'+fmtM(endAsset)+'。'+drawStartAge+'歳から年間'+fmtM(avgDeficit)+'の取り崩しが必要な見込みです';
-  }else{
-    verdictReason='資産は'+assetLifeAge+'歳頃に枯渇する見込みです（不足総額：'+fmtM(totalDeficit)+'）';
-  }
-  let verdictText;
-  if(verdictClass==='ok'){
-    verdictText=drawStartAge>=endAge
-      ?'この生活設計は老後まで概ね成立しています。収支は安定しており、取り崩しなしで'+endAge+'歳時点に'+fmtM(endAsset)+'が残る見込みです。'
-      :'この生活設計は老後まで成立しています。取り崩しは発生しますが管理できる水準で、'+endAge+'歳時点でも'+fmtM(endAsset)+'が残る見込みです。';
-  }else if(verdictClass==='cond'){
-    verdictText=assetDepleted
-      ?'資産は'+assetLifeAge+'歳頃に枯渇する可能性があります。収入か支出の調整で設計を安定させられます。'
-      :endAssetRatio>=1
-        ?endAge+'歳時点に'+fmtM(endAsset)+'が残る見込みですが、退職後の収支ギャップへの対応が必要です。'
-        :'この生活設計は条件付きで成立しています。'+endAge+'歳時点の残高は'+fmtM(endAsset)+'と薄めで、余裕を持たせる工夫が必要です。';
-  }else{
-    verdictText='資産は'+assetLifeAge+'歳頃に枯渇する見込みです。'+endAge+'歳まであと'+(endAge-assetLifeAge)+'年間の不足が生じます。収入・支出の再設計が必要です。';
-  }
+  // ── 終了時点の年間支出・余裕年数 ─────────────────────────────────
+  const endSpend = endRow ? endRow.spend : curSpend;
 
   // =====================================================================
-  // STEP 3: 診断タイプ — スコア制
-  // タイプは「全体の安全度」ではなく「主な論点」を示すラベル
+  // [STEP 1] 第一優先：成立するかどうか
   // =====================================================================
-  const typeScores = {
-    '支出過大型':0, '老後不足型':0, '取り崩し依存型':0,
-    'ボーナス依存型':0, '生活圧迫型':0, '将来重視の積立型':0, '安定型':0,
+  const _isOk = !assetDepleted; // true=成立 / false=不成立
+
+  // =====================================================================
+  // [STEP 2A/2B] 余裕年数 or 不足年数
+  // =====================================================================
+  // 成立時: 余裕年数 = 終了時残高 ÷ 終了時年間支出
+  const marginYears = _isOk && endSpend > 0 ? endAsset / endSpend : 0;
+  // 不成立時: 不足年数 = 終了年齢 - 枯渇年齢
+  const shortfallYears = assetDepleted ? depletionGapYears : 0;
+
+  // =====================================================================
+  // [STEP 3A] 成立時の天気レベル（余裕年数ベース）
+  // =====================================================================
+  let _rawLevel; // 7=晴天 6=晴れ 5=晴れのち曇り 4=曇り 3=曇りのち雨
+  if(_isOk){
+    if     (marginYears >= 4) _rawLevel = 7;
+    else if(marginYears >= 3) _rawLevel = 6;
+    else if(marginYears >= 2) _rawLevel = 5;
+    else if(marginYears >= 1) _rawLevel = 4;
+    else                      _rawLevel = 3;
+  }
+
+  // =====================================================================
+  // [STEP 3B] 不成立時の天気レベル（不足年数ベース）
+  // =====================================================================
+  if(!_isOk){
+    if     (shortfallYears < 1) _rawLevel = 3; // 曇りのち雨
+    else if(shortfallYears < 2) _rawLevel = 2; // 雨
+    else                        _rawLevel = 1; // 大雨
+  }
+
+  // =====================================================================
+  // [STEP 4A] 固定費補正（成立時のみ・1段階のみ・大雨以下には下げない）
+  // =====================================================================
+  const _level = (_isOk && fixedPressure) ? Math.max(3, _rawLevel - 1) : _rawLevel;
+  // ※ 不成立時は固定費補正しない（不成立を成立にも、より深刻にも変えない）
+
+  // =====================================================================
+  // 最終判定オブジェクト _judg を生成
+  // 全表示要素はここから生成する
+  // =====================================================================
+  const _WEATHER_TABLE = {
+    7: { grade:'晴天',       emoji:'☀️',  cls:'w-sunny2',  title:'かなり余裕があります',        tagline:'終了年齢まで十分届き、さらにその後の備えも大きい状態です。' },
+    6: { grade:'晴れ',       emoji:'🌤️', cls:'w-sunny',   title:'安定しています',              tagline:'終了年齢までしっかり成立しており、一定の余裕もあります。' },
+    5: { grade:'晴れのち曇り',emoji:'⛅',  cls:'w-cloudsun',title:'基本的には成立しています',    tagline:'終了年齢までは届いていますが、その後の余裕は大きくありません。' },
+    4: { grade:'曇り',       emoji:'☁️',  cls:'w-cloudy',  title:'余裕は限られています',        tagline:'終了年齢までは届きますが、余裕が少ない状態です。' },
+    3: { grade:'曇りのち雨', emoji:'🌥️', cls:'w-suncloud', title:'このままでは心もとない状態です', tagline:_isOk?'余裕がほとんどありません。支出調整で改善できます。':'あと少しで届きます。支出調整や収入補強で改善できます。' },
+    2: { grade:'雨',         emoji:'🌧️', cls:'w-rain',    title:'見直しが必要です',            tagline:'このままでは終了年齢前に資産が尽きる見込みです。' },
+    1: { grade:'大雨',       emoji:'🌧️', cls:'w-rain',    title:'見直しが早急に必要です',      tagline:'終了年齢まで大きく資産が不足します。早めの対策が必要です。' },
   };
+  const _w = _WEATHER_TABLE[_level] || _WEATHER_TABLE[2];
 
-  // 支出過大型: 年収に対して支出が重い
+  // 総合判定
+  const verdictClass    = _isOk ? 'ok' : 'ng';
+  const verdictLabel    = _isOk ? '成立' : '不成立';
+  const verdictBadgeBg  = _isOk ? 'var(--green-l)' : 'var(--red-l)';
+  const verdictBadgeCol = _isOk ? 'var(--green)'   : 'var(--red)';
+
+  // 判定理由
+  let verdictReason, verdictText;
+  if(_isOk){
+    verdictReason = endAge+'歳時点に'+fmtM(endAsset)+'（余裕'+Math.round(marginYears*10)/10+'年分）が残る見込みです';
+    verdictText   = drawStartAge >= endAge
+      ? 'この生活設計は成立しています。取り崩しなしで'+endAge+'歳時点に'+fmtM(endAsset)+'が残る見込みです。'
+      : 'この生活設計は成立しています。取り崩しは発生しますが、'+endAge+'歳時点でも'+fmtM(endAsset)+'が残る見込みです。';
+  } else {
+    verdictReason = '資産は'+assetLifeAge+'歳頃に枯渇する見込みです（不足'+shortfallYears+'年間）';
+    verdictText   = '資産は'+assetLifeAge+'歳頃に枯渇する見込みです。'+endAge+'歳まであと'+shortfallYears+'年間の不足が生じます。収入・支出の再設計が必要です。';
+  }
+
+  // 天気変数（テンプレートから参照）
+  const wGrade      = _w.grade;
+  const wEmoji      = _w.emoji;
+  const wColorClass = _w.cls;
+  const wTitle      = _w.title;
+  const wTagline    = _w.tagline;
+  let   wDetailText;
+  if(!_isOk){
+    wDetailText = '資産は'+assetLifeAge+'歳頃に枯渇する見込みで、'+endAge+'歳まであと'+shortfallYears+'年間の不足が生じます。'
+      + (variableHeavy ? '変動費（'+Math.round(variableRatio*100)+'%）に見直し余地があります。外食・娯楽・旅行から調整すると効果的です。'
+          : fixedPressure ? '固定費の割合が高く（'+Math.round(fixedRatio*100)+'%）削減が難しい構造です。収入補強を優先してください。'
+          : '支出削減または収入補強が必要です。');
+  } else if(_level <= 4){
+    const _mr2 = Math.round(marginYears*10)/10;
+    wDetailText = endAge+'歳時点の残高は'+fmtM(endAsset)+'（余裕'+_mr2+'年分）です。'
+      + (fixedPressure ? '固定費の割合が高く（'+Math.round(fixedRatio*100)+'%）想定外の支出に対応しにくい構造です。' : '')
+      + (variableHeavy ? '変動費（'+Math.round(variableRatio*100)+'%）に改善余地があります。外食・娯楽・旅行の調整で余裕を広げられます。' : '');
+  } else {
+    const _mr3 = Math.round(marginYears*10)/10;
+    wDetailText = endAge+'歳時点でも'+fmtM(endAsset)+'（余裕'+_mr3+'年分）が残る見込みです。'
+      + (_pensionSurplus ? '年金開始後は収支が黒字化します。' : '')
+      + (fixedPressure ? 'ただし固定費の割合が高いため（'+Math.round(fixedRatio*100)+'%）、将来の想定外支出には注意が必要です。' : '')
+      + (variableVeryHeavy ? '変動費に大きな改善余地があります（'+Math.round(variableRatio*100)+'%）。' : '');
+  }
+
+  // =====================================================================
+  // [STEP 3] 診断タイプ（スコア制）
+  // =====================================================================
+  // （STEP 1で宣言済みの変数を再利用）
+  const _stableBonus = (_pensionSurplus&&endAssetRatio>=5)?30:(_pensionSurplus&&endAssetRatio>=3)?15:0;
+  const typeScores = {
+    '支出過大型':0,'老後不足型':0,'取り崩し依存型':0,
+    'ボーナス依存型':0,'生活圧迫型':0,'将来重視の積立型':0,'安定型':0,
+  };
   if(spendRatio>1.05)       typeScores['支出過大型']+=65;
   else if(spendRatio>0.92)  typeScores['支出過大型']+=45;
   else if(spendRatio>0.82)  typeScores['支出過大型']+=22;
   else if(spendRatio>0.72)  typeScores['支出過大型']+=8;
   if(assetDepleted)          typeScores['支出過大型']+=12;
-
-  // 老後不足型: 資産枯渇が主因（支出過大ではなく、老後に足りない）
   if(assetDepleted&&depletionGapYears>=15&&spendRatio<0.90) typeScores['老後不足型']+=65;
-  else if(assetDepleted&&depletionGapYears>=8&&spendRatio<0.90) typeScores['老後不足型']+=50;
-  else if(assetDepleted&&spendRatio<0.90) typeScores['老後不足型']+=35;
-  if(!assetDepleted&&endAssetRatio<0.8)   typeScores['老後不足型']+=18;
-  if(pensionCoverRatio<0.40)              typeScores['老後不足型']+=10;
-
-  // 取り崩し依存型: 取り崩しの「強さ」で判定
-  // ただし「年金後に黒字化」かつ「終了資産が十分」なら一時的ギャップ → スコア抑制
-  const _drawDepMulti = (_pensionSurplus && endAssetRatio>=3) ? 0.25 : 1.0;
-  if(drawRatioW>0.55)      typeScores['取り崩し依存型']+=Math.round(50*_drawDepMulti);
-  else if(drawRatioW>0.38) typeScores['取り崩し依存型']+=Math.round(33*_drawDepMulti);
-  else if(drawRatioW>0.22) typeScores['取り崩し依存型']+=Math.round(17*_drawDepMulti);
-  else if(drawRatioW>0.10) typeScores['取り崩し依存型']+=Math.round(5*_drawDepMulti);
-  if(maxDrawRatio5y>0.50)  typeScores['取り崩し依存型']+=Math.round(16*_drawDepMulti);
-  else if(maxDrawRatio5y>0.30) typeScores['取り崩し依存型']+=Math.round(8*_drawDepMulti);
-
-  // ボーナス依存型: 月収が弱く、ボーナスと年間支出のバランスで生活している
-  if(bonusDependenceRatio>0.32&&spendRatio>0.88) typeScores['ボーナス依存型']+=55;
-  else if(bonusDependenceRatio>0.26&&spendRatio>0.82) typeScores['ボーナス依存型']+=38;
-  else if(bonusDependenceRatio>0.20&&spendRatio>0.78) typeScores['ボーナス依存型']+=22;
-  else if(bonusDependenceRatio>0.30) typeScores['ボーナス依存型']+=15;
-  // 月収÷ボーナスが小さい（月収だけでは支出を賄えない）
+  else if(assetDepleted&&depletionGapYears>=8&&spendRatio<0.90)  typeScores['老後不足型']+=50;
+  else if(assetDepleted&&spendRatio<0.90)                        typeScores['老後不足型']+=35;
+  if(!assetDepleted&&endAssetRatio<0.8) typeScores['老後不足型']+=18;
+  if(pensionCoverRatio<0.40)            typeScores['老後不足型']+=10;
+  const _drawM = (_pensionSurplus&&endAssetRatio>=3)?0.25:1.0;
+  if(drawRatioW>0.55)      typeScores['取り崩し依存型']+=Math.round(50*_drawM);
+  else if(drawRatioW>0.38) typeScores['取り崩し依存型']+=Math.round(33*_drawM);
+  else if(drawRatioW>0.22) typeScores['取り崩し依存型']+=Math.round(17*_drawM);
+  else if(drawRatioW>0.10) typeScores['取り崩し依存型']+=Math.round(5*_drawM);
+  if(maxDrawRatio5y>0.50)  typeScores['取り崩し依存型']+=Math.round(16*_drawM);
+  else if(maxDrawRatio5y>0.30) typeScores['取り崩し依存型']+=Math.round(8*_drawM);
+  if(bonusRatio>0.32&&spendRatio>0.88) typeScores['ボーナス依存型']+=55;
+  else if(bonusRatio>0.26&&spendRatio>0.82) typeScores['ボーナス依存型']+=38;
+  else if(bonusRatio>0.20&&spendRatio>0.78) typeScores['ボーナス依存型']+=22;
+  else if(bonusRatio>0.30) typeScores['ボーナス依存型']+=15;
   if(monthlyIncome>0&&bonus>monthlyIncome*3.5) typeScores['ボーナス依存型']+=12;
-
-  // 生活圧迫型: 積立が現役の収支を圧迫している
   if(savingPressureRatio>0.36&&workingBalanceRatio<-0.04) typeScores['生活圧迫型']+=58;
-  else if(savingPressureRatio>0.28&&workingBalanceRatio<0) typeScores['生活圧迫型']+=38;
-  else if(savingPressureRatio>0.22&&workingBalanceRatio<0.03) typeScores['生活圧迫型']+=20;
+  else if(savingPressureRatio>0.28&&workingBalanceRatio<0)     typeScores['生活圧迫型']+=38;
+  else if(savingPressureRatio>0.22&&workingBalanceRatio<0.03)  typeScores['生活圧迫型']+=20;
   if(cashMonths2<6&&savingPressureRatio>0.20) typeScores['生活圧迫型']+=10;
-
-  // 将来重視の積立型: 積立は高いが生活は成り立っている
   if(savingPressureRatio>0.22&&workingBalanceRatio>=0) typeScores['将来重視の積立型']+=48;
-  else if(savingPressureRatio>0.15&&workingBalanceRatio>0.04) typeScores['将来重視の積立型']+=30;
+  else if(savingPressureRatio>0.15&&workingBalanceRatio>0.04)  typeScores['将来重視の積立型']+=30;
   else if(savingPressureRatio>0.10) typeScores['将来重視の積立型']+=14;
-
-  // 安定型: 突出した問題がない
-  // 年金後黒字化 かつ 終了資産十分 → 大幅加点（取り崩しは一時的ギャップ）
-  const _stableBonus = (_pensionSurplus&&endAssetRatio>=5)?30:(_pensionSurplus&&endAssetRatio>=3)?15:0;
   if(!assetDepleted&&endAssetRatio>=8)                       typeScores['安定型']+=80+_stableBonus;
   else if(!assetDepleted&&endAssetRatio>=5&&drawRatioW<0.60) typeScores['安定型']+=70+_stableBonus;
   else if(!assetDepleted&&endAssetRatio>=4&&drawRatioW<0.50) typeScores['安定型']+=60+_stableBonus;
@@ -1586,193 +1650,11 @@ function diagnose(){
   else if(workingBalanceRatio>0) typeScores['安定型']+=5;
   if(cashMonths2>=18) typeScores['安定型']+=8;
   else if(cashMonths2>=6) typeScores['安定型']+=4;
-
-  // 主タイプ・副タイプ決定
   const _typeSorted = Object.entries(typeScores).sort((a,b)=>b[1]-a[1]);
   const diagType    = _typeSorted[0][0];
-  const diagSubType = _typeSorted[1][1]>=_typeSorted[0][1]*0.62 ? _typeSorted[1][0] : null;
-  const totalScore  = baseSafetyScore; // UI表示用
+  const diagSubType = _typeSorted[1][1] >= _typeSorted[0][1]*0.62 ? _typeSorted[1][0] : null;
+  const totalScore  = Math.round(marginYears * 10);
 
-  // =====================================================================
-  // STEP 4: 天気マーク（v7）
-  // =====================================================================
-  // 主判定：終了時残高の余裕年数 + 枯渇の有無と不足年数
-  // 原則：足りないケースは明確に危険側へ寄せる
-  // =====================================================================
-
-  // 終了時点の年間支出・余裕年数
-  const endSpend = endRow ? endRow.spend : curSpend;
-  const marginYears = (!assetDepleted && endSpend > 0) ? endAsset / endSpend : -depletionGapYears;
-
-  // 固定費・変動費（補正用）
-  const fixedMonthly = housingM
-    + nv('e-util') + nv('e-tel') + nv('e-ins') + nv('e-sub')
-    + familyM + nv('e-car') + nv('e-edu') + nv('e-care');
-  const variableMonthly = nv('e-food') + nv('e-dine') + nv('e-daily')
-    + nv('e-fashion') + nv('e-social') + nv('e-other')
-    + (annualSpecial / 12);
-  const totalMonthlyForRatio = fixedMonthly + variableMonthly;
-  const fixedRatio = totalMonthlyForRatio > 0 ? fixedMonthly / totalMonthlyForRatio : 0.5;
-  const fixedHeavy    = fixedRatio >= 0.65;
-  const variableHeavy = fixedRatio <= 0.40;
-
-  let wGrade, wEmoji, wTitle, wTagline, wColorClass, wDetailText;
-
-  // ── 終了年齢まで届かない場合 ────────────────────────────────────
-  if(assetDepleted){
-    if(depletionGapYears <= 2){
-      // 不足1〜2年 → 小雨（あと少しで届く）
-      wGrade='小雨'; wEmoji='🌦️'; wColorClass='w-sprinkle';
-      wTitle='あと少しで届きません';
-      wTagline=endAge+'歳まで残り'+(depletionGapYears)+'年分足りません';
-      wDetailText='資産は'+assetLifeAge+'歳頃に枯渇する見込みです。終了年齢まであと'+depletionGapYears+'年分の不足です。少しの改善で解消できます。';
-    } else {
-      // 不足3年以上 → 雨
-      wGrade='雨'; wEmoji='🌧️'; wColorClass='w-rain';
-      wTitle='資金計画の再設計をおすすめします';
-      wTagline=endAge+'歳まで'+depletionGapYears+'年間不足します';
-      wDetailText='資産は'+assetLifeAge+'歳頃に枯渇する見込みで、'+endAge+'歳まであと'+depletionGapYears+'年間の不足が生じます。支出を抑えるか収入を補強する設計の見直しが必要です。';
-    }
-
-  // ── 終了年齢まで届く場合（余裕年数で判定）────────────────────
-  } else if(marginYears >= 7){
-    // 7年以上 → 晴れ系
-    const _veryWide = marginYears >= 12 || (marginYears >= 8 && _pensionSurplus);
-    if(_veryWide){
-      wGrade='強い晴れ'; wEmoji='☀️'; wColorClass='w-sunny2';
-      wTitle = marginYears >= 12 ? '老後資金は十分確保できています' : 'かなり安定しています';
-      wTagline='老後まで十分な余裕がある設計です。使える余地もあります';
-      wDetailText=endAge+'歳時点でも'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
-        +(_pensionSurplus?'年金開始後は収支が黒字化します。':'老後を通じても大きく崩れにくい設計です。');
-    } else {
-      wGrade='晴れ'; wEmoji='🌤️'; wColorClass='w-sunny';
-      wTitle='おおむね安定しています';
-      wTagline='老後まで大きな問題はありません';
-      wDetailText=endAge+'歳時点でも'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
-        +(_pensionSurplus?'退職〜年金前の一時的な取り崩しはありますが、年金開始後に収支が改善します。'
-                         :'取り崩しは発生しますが資産規模に対して管理できる範囲です。');
-    }
-
-  } else if(marginYears >= 5){
-    // 5〜7年 → 晴れのち曇り
-    wGrade='晴れのち曇り'; wEmoji='⛅'; wColorClass='w-cloudsun';
-    wTitle='おおむね安定していますが、余裕に注意';
-    wTagline='余裕は'+Math.round(marginYears*10)/10+'年分。長寿や予定外支出への備えも意識してください';
-    wDetailText=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
-      +'全体として安定していますが、想定外の支出増や長生きリスクへの余裕はやや限られます。';
-
-  } else if(marginYears >= 3){
-    // 3〜5年 → 曇り
-    wGrade='曇り'; wEmoji='☁️'; wColorClass='w-cloudy';
-    wTitle='余裕はありますが、見直しを検討してください';
-    wTagline='余裕は'+Math.round(marginYears*10)/10+'年分。設計の調整余地があります';
-    wDetailText=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
-      +(fixedHeavy?'固定費の割合が高く（'+Math.round(fixedRatio*100)+'%）下振れリスクがあります。固定費の見直しを優先してください。'
-        :variableHeavy?'変動費を絞ることで余裕を広げられます。':'支出または収入の調整で余裕を広げられます。');
-
-  } else {
-    // 0〜3年 → 曇りのち雨
-    wGrade='曇りのち雨'; wEmoji='🌥️'; wColorClass='w-suncloud';
-    wTitle='改善しないと余裕がなくなります';
-    wTagline='余裕は'+Math.round(marginYears*10)/10+'年分。早めの対策が必要です';
-    wDetailText=endAge+'歳時点の残高は'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）と余裕がほとんどありません。'
-      +(fixedHeavy?'固定費の割合が高く調整が難しいため、早めの設計見直しをお勧めします。'
-                  :'支出の見直しや収入の補強で改善できます。早めに対策を検討してください。');
-  }
-
-      // =====================================================================
-  // 3階層判定ロジック
-  // =====================================================================
-
-  // 共通指標
-  const investNow   = nv('invest');
-  const totalNowAmt = cashNow + investNow;
-  const investRatio = totalNowAmt > 0 ? investNow / totalNowAmt : 0;
-  const cashYears   = curSpend > 0 ? cashNow / curSpend : 0;   // 現金余力年数
-  const assetYears  = curSpend > 0 ? totalNowAmt / curSpend : 0; // 資産余力年数
-
-  // ── 第1判定: 総合評価（終了時残高が主軸）─────────────────────────
-  // marginYearsは天気ブロックで計算済み（終了時残高÷終了時年間支出）
-  let layer1Grade, layer1Label, layer1Color, layer1Comment;
-  if(assetDepleted || marginYears < 0){
-    layer1Grade='🌧️'; layer1Label='要再設計'; layer1Color='var(--red)';
-    layer1Comment = assetDepleted
-      ? '資産は'+assetLifeAge+'歳頃に枯渇する見込みです。'+endAge+'歳まであと'+(endAge-assetLifeAge)+'年間の不足が生じます。収入増または支出削減が必要です。'
-      : '終了時点の残高がマイナスになる見込みです。設計の見直しが必要です。';
-  } else if(marginYears >= 7){
-    layer1Grade='☀️'; layer1Label='十分な余裕'; layer1Color='var(--green)';
-    layer1Comment = endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。終了時点の余裕は十分です。'
-      +(_pensionSurplus ? '年金開始後は収支が黒字化し、安定した老後になります。' : '');
-  } else if(marginYears >= 5){
-    layer1Grade='🌤️'; layer1Label='余裕あり'; layer1Color='var(--green)';
-    layer1Comment = endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。長寿や予定外支出への備えも意識してください。';
-  } else if(marginYears >= 3){
-    layer1Grade='⛅'; layer1Label='やや余裕あり'; layer1Color='#B8860B';
-    layer1Comment = endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）が残る見込みです。'
-      +(fixedHeavy ? '固定費の割合が高く（'+Math.round(fixedRatio*100)+'%）、下振れリスクに注意が必要です。' : '支出の見直しで余裕を広げられます。');
-  } else {
-    layer1Grade='🌦️'; layer1Label='余裕が薄い'; layer1Color='var(--red)';
-    layer1Comment = endAge+'歳時点の残高は'+fmtM(endAsset)+'（'+Math.round(marginYears)+'年分相当）と余裕が薄い状態です。早めの設計見直しをお勧めします。';
-  }
-
-  // ── 第2判定: 資産余力評価（現在総資産の厚み）────────────────────
-  let layer2Grade, layer2Label, layer2Color, layer2Comment;
-  if(assetYears >= 7){
-    layer2Grade='☀️'; layer2Label='非常に厚い'; layer2Color='var(--green)';
-    layer2Comment = '現在の総資産'+fmtM(totalNowAmt)+'は年間支出の'+Math.round(assetYears)+'年分です。資産の厚みは十分で、長期的な安心材料になっています。';
-  } else if(assetYears >= 5){
-    layer2Grade='🌤️'; layer2Label='十分'; layer2Color='var(--green)';
-    layer2Comment = '現在の総資産'+fmtM(totalNowAmt)+'は年間支出の'+Math.round(assetYears)+'年分です。十分な水準ですが、長期の突発支出には引き続き注意してください。';
-  } else if(assetYears >= 3){
-    layer2Grade='⛅'; layer2Label='やや余裕'; layer2Color='#B8860B';
-    layer2Comment = '現在の総資産'+fmtM(totalNowAmt)+'は年間支出の'+Math.round(assetYears)+'年分です。水準としてはやや余裕がある状態ですが、積立や資産形成を継続することをお勧めします。';
-  } else if(assetYears >= 1){
-    layer2Grade='☁️'; layer2Label='やや薄い'; layer2Color='#777';
-    layer2Comment = '現在の総資産'+fmtM(totalNowAmt)+'は年間支出の'+Math.round(assetYears)+'年分です。資産の厚みがやや不足しています。積立ペースを確認してください。';
-  } else {
-    layer2Grade='🌧️'; layer2Label='薄い'; layer2Color='var(--red)';
-    layer2Comment = '現在の総資産'+fmtM(totalNowAmt)+'は年間支出の'+Math.round(assetYears)+'年分未満です。資産形成を優先してください。';
-  }
-
-  // ── 第3判定: 現金・投資配分評価 ──────────────────────────────────
-  let layer3Grade, layer3Label, layer3Color, layer3Comment;
-  const investPct = Math.round(investRatio * 100);
-  const cashYearsRound = Math.round(cashYears * 10) / 10;
-
-  if(investRatio < 0.30){
-    // 投資比率30%未満
-    if(cashYears >= 5){
-      layer3Grade='✅'; layer3Label='安全性重視'; layer3Color='var(--green)';
-      layer3Comment = '投資比率'+investPct+'%・現金余力'+cashYearsRound+'年分。安全性を重視した配分です。問題ありませんが、余裕があれば積立・投資を少し増やすことも検討できます。';
-    } else {
-      layer3Grade='⚠️'; layer3Label='投資余地あり'; layer3Color='#B8860B';
-      layer3Comment = '投資比率'+investPct+'%・現金余力'+cashYearsRound+'年分。現金に偏った配分です。長期運用の観点から投資比率を少し高めることを検討してください。';
-    }
-  } else if(investRatio < 0.50){
-    // 投資比率30〜50%
-    if(cashYears >= 5){
-      layer3Grade='✅'; layer3Label='バランス良好'; layer3Color='var(--green)';
-      layer3Comment = '投資比率'+investPct+'%・現金余力'+cashYearsRound+'年分。現金と投資のバランスが取れた配分です。現金の安心感と資産運用の両立ができています。';
-    } else if(cashYears >= 3){
-      layer3Grade='⚠️'; layer3Label='現金に注意'; layer3Color='#B8860B';
-      layer3Comment = '投資比率'+investPct+'%・現金余力'+cashYearsRound+'年分。投資比率は適切ですが、現金余力が'+cashYearsRound+'年分とやや薄めです。急な支出に備え現金の維持を意識してください。';
-    } else {
-      layer3Grade='⚠️'; layer3Label='現金不足気味'; layer3Color='var(--red)';
-      layer3Comment = '投資比率'+investPct+'%・現金余力'+cashYearsRound+'年分。投資比率に対して現金が少なく、急な出費や取り崩しのタイミングで対応しにくい状態です。現金比率を高めることを検討してください。';
-    }
-  } else {
-    // 投資比率50%以上
-    if(cashYears >= 5){
-      layer3Grade='✅'; layer3Label='問題なし'; layer3Color='var(--green)';
-      layer3Comment = '投資比率'+investPct+'%・現金余力'+cashYearsRound+'年分。投資比率が高めですが、現金余力が十分あるため安心感があります。引き続き現金を保ちながら運用してください。';
-    } else if(cashYears >= 3){
-      layer3Grade='⚠️'; layer3Label='投資比率やや高め'; layer3Color='#B8860B';
-      layer3Comment = '投資比率'+investPct+'%・現金余力'+cashYearsRound+'年分。投資比率が高めで現金余力が'+cashYearsRound+'年分です。老後の取り崩し期に向けて、徐々に現金比率を高めることを検討してください。';
-    } else {
-      layer3Grade='⚠️'; layer3Label='投資比率高すぎ'; layer3Color='var(--red)';
-      layer3Comment = '投資比率'+investPct+'%・現金余力'+cashYearsRound+'年分。投資比率が高い上に現金余力が'+cashYearsRound+'年分と薄い状態です。市場変動時のリスクが大きく、現金確保を優先してください。';
-    }
-  }
 
     // STEP 5: コメント生成用ラベル（issueScoresV5）
   // 全体評価と局所論点を分離する設計
@@ -1939,6 +1821,118 @@ function diagnose(){
   const pensionRowNet = rows.find(r=>r.age>=(nv('pension-age')||65))?.net || 0;
 
   window.rows_cache = rows;
+
+  // === 3階層判定ブロック（固定）===
+  // ※ このブロックは削除・移動禁止。テンプレートがlayer1〜3を参照している。
+  {
+    // 共通指標
+    const investNow_3l   = nv('invest');
+    const totalNowAmt_3l = cashNow + investNow_3l;
+    const investRatio_3l = totalNowAmt_3l > 0 ? investNow_3l / totalNowAmt_3l : 0;
+    const cashYears_3l   = curSpend > 0 ? cashNow          / curSpend : 0;
+    const assetYears_3l  = curSpend > 0 ? totalNowAmt_3l   / curSpend : 0;
+
+    // ── 第1評価: 終了時の余裕（_level と marginYears から導出）──────
+    window._layer1Grade   = '';
+    window._layer1Label   = '';
+    window._layer1Color   = '';
+    window._layer1Comment = '';
+    if(marginYears >= 4){
+      window._layer1Grade='☀️'; window._layer1Label='十分な余裕'; window._layer1Color='var(--green)';
+      window._layer1Comment=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears*10)/10+'年分相当）が残る見込みです。終了時点の余裕は十分です。'
+        +(_pensionSurplus?'年金開始後は収支が黒字化します。':'');
+    }else if(marginYears >= 2){
+      window._layer1Grade='🌤️'; window._layer1Label='余裕あり'; window._layer1Color='var(--green)';
+      window._layer1Comment=endAge+'歳時点に'+fmtM(endAsset)+'（'+Math.round(marginYears*10)/10+'年分相当）が残る見込みです。一定の余裕があります。';
+    }else if(marginYears >= 0){
+      window._layer1Grade='⛅'; window._layer1Label='やや余裕あり'; window._layer1Color='#B8860B';
+      window._layer1Comment=endAge+'歳時点の残高は'+fmtM(endAsset)+'（'+Math.round(marginYears*10)/10+'年分相当）です。終了年齢までは届きますが余裕は限られています。'
+        +(fixedHeavy?'固定費の割合が高く（'+Math.round(fixedRatio*100)+'%）下振れリスクがあります。':'');
+    }else{
+      window._layer1Grade='🌧️'; window._layer1Label='要再設計'; window._layer1Color='var(--red)';
+      window._layer1Comment='資産は'+assetLifeAge+'歳頃に枯渇する見込みです。'+endAge+'歳まであと'+depletionGapYears+'年間の不足が生じます。収入増または支出削減が必要です。';
+    }
+
+    // ── 第2評価: 現在の資産余力 ──────────────────────────────────
+    window._layer2Grade   = '';
+    window._layer2Label   = '';
+    window._layer2Color   = '';
+    window._layer2Comment = '';
+    if(assetYears_3l >= 7){
+      window._layer2Grade='☀️'; window._layer2Label='非常に厚い'; window._layer2Color='var(--green)';
+      window._layer2Comment='現在の総資産'+fmtM(totalNowAmt_3l)+'は年間支出の'+Math.round(assetYears_3l)+'年分です。資産の厚みは十分で、長期的な安心材料になっています。';
+    }else if(assetYears_3l >= 5){
+      window._layer2Grade='🌤️'; window._layer2Label='十分'; window._layer2Color='var(--green)';
+      window._layer2Comment='現在の総資産'+fmtM(totalNowAmt_3l)+'は年間支出の'+Math.round(assetYears_3l)+'年分です。十分な水準ですが、長期の突発支出には引き続き注意してください。';
+    }else if(assetYears_3l >= 3){
+      window._layer2Grade='⛅'; window._layer2Label='やや余裕'; window._layer2Color='#B8860B';
+      window._layer2Comment='現在の総資産'+fmtM(totalNowAmt_3l)+'は年間支出の'+Math.round(assetYears_3l)+'年分です。やや余裕がありますが、積立や資産形成を継続することをお勧めします。';
+    }else if(assetYears_3l >= 1){
+      window._layer2Grade='☁️'; window._layer2Label='やや薄い'; window._layer2Color='#777';
+      window._layer2Comment='現在の総資産'+fmtM(totalNowAmt_3l)+'は年間支出の'+Math.round(assetYears_3l)+'年分です。資産の厚みがやや不足しています。積立ペースを確認してください。';
+    }else{
+      window._layer2Grade='🌧️'; window._layer2Label='薄い'; window._layer2Color='var(--red)';
+      window._layer2Comment='現在の総資産'+fmtM(totalNowAmt_3l)+'は年間支出の'+Math.round(assetYears_3l)+'年分未満です。資産形成を優先してください。';
+    }
+
+    // ── 第3評価: 現金・投資の配分 ────────────────────────────────
+    window._layer3Grade   = '';
+    window._layer3Label   = '';
+    window._layer3Color   = '';
+    window._layer3Comment = '';
+    const _investPct3  = Math.round(investRatio_3l * 100);
+    const _cashYearsR3 = Math.round(cashYears_3l * 10) / 10;
+    if(investRatio_3l < 0.30){
+      if(cashYears_3l >= 5){
+        window._layer3Grade='✅'; window._layer3Label='安全性重視'; window._layer3Color='var(--green)';
+        window._layer3Comment='投資比率'+_investPct3+'%・現金余力'+_cashYearsR3+'年分。安全性を重視した配分です。余裕があれば積立・投資を少し増やすことも検討できます。';
+      }else{
+        window._layer3Grade='⚠️'; window._layer3Label='投資余地あり'; window._layer3Color='#B8860B';
+        window._layer3Comment='投資比率'+_investPct3+'%・現金余力'+_cashYearsR3+'年分。現金に偏った配分です。長期運用の観点から投資比率を少し高めることを検討してください。';
+      }
+    }else if(investRatio_3l < 0.50){
+      if(cashYears_3l >= 5){
+        window._layer3Grade='✅'; window._layer3Label='バランス良好'; window._layer3Color='var(--green)';
+        window._layer3Comment='投資比率'+_investPct3+'%・現金余力'+_cashYearsR3+'年分。現金と投資のバランスが取れた配分です。';
+      }else if(cashYears_3l >= 3){
+        window._layer3Grade='⚠️'; window._layer3Label='現金に注意'; window._layer3Color='#B8860B';
+        window._layer3Comment='投資比率'+_investPct3+'%・現金余力'+_cashYearsR3+'年分。投資比率は適切ですが現金余力がやや薄めです。急な支出に備え現金を維持してください。';
+      }else{
+        window._layer3Grade='⚠️'; window._layer3Label='現金不足気味'; window._layer3Color='var(--red)';
+        window._layer3Comment='投資比率'+_investPct3+'%・現金余力'+_cashYearsR3+'年分。現金が少なく急な出費への対応が難しい状態です。現金比率を高めることを検討してください。';
+      }
+    }else{
+      if(cashYears_3l >= 5){
+        window._layer3Grade='✅'; window._layer3Label='問題なし'; window._layer3Color='var(--green)';
+        window._layer3Comment='投資比率'+_investPct3+'%・現金余力'+_cashYearsR3+'年分。投資比率が高めですが現金余力が十分あります。現金を保ちながら運用してください。';
+      }else if(cashYears_3l >= 3){
+        window._layer3Grade='⚠️'; window._layer3Label='投資比率やや高め'; window._layer3Color='#B8860B';
+        window._layer3Comment='投資比率'+_investPct3+'%・現金余力'+_cashYearsR3+'年分。老後の取り崩し期に向けて徐々に現金比率を高めることを検討してください。';
+      }else{
+        window._layer3Grade='⚠️'; window._layer3Label='投資比率高すぎ'; window._layer3Color='var(--red)';
+        window._layer3Comment='投資比率'+_investPct3+'%・現金余力'+_cashYearsR3+'年分。投資比率が高い上に現金余力が薄い状態です。現金確保を優先してください。';
+      }
+    }
+  }
+  // layer1〜3 をローカル変数として展開（テンプレートから参照できるよう）
+  const layer1Grade   = window._layer1Grade;
+  const layer1Label   = window._layer1Label;
+  const layer1Color   = window._layer1Color;
+  const layer1Comment = window._layer1Comment;
+  const layer2Grade   = window._layer2Grade;
+  const layer2Label   = window._layer2Label;
+  const layer2Color   = window._layer2Color;
+  const layer2Comment = window._layer2Comment;
+  const layer3Grade   = window._layer3Grade;
+  const layer3Label   = window._layer3Label;
+  const layer3Color   = window._layer3Color;
+  const layer3Comment = window._layer3Comment;
+  const investNow     = nv('invest');
+  const totalNowAmt   = cashNow + investNow;
+  const investRatio   = totalNowAmt > 0 ? investNow / totalNowAmt : 0;
+  const cashYears     = curSpend > 0 ? cashNow     / curSpend : 0;
+  const assetYears    = curSpend > 0 ? totalNowAmt / curSpend : 0;
+  // === 3階層判定ブロックここまで ===
 
   // === 改善提案 ===
   const improvements=buildImprovementsNew(verdictClass,mainIssue,avgDeficit,annualIncome,curSpend,rows,monthlySave,endAsset,age,retireAge,pensionAge,endAge,gapYears,drawStartAge,housingM,annualSpecial,saveRatio,avgPreNet,familyM,familyEndAge,_pensionSurplus,endAssetRatio);
@@ -2330,88 +2324,6 @@ function resetAll(){
   eduSet(false);
   s1calc(); s2calc();
   go(1);
-}
-
-// ===== PDF EXPORT =====
-async function exportPDF(){
-  const btn = el('pdf-btn');
-  const origText = btn.textContent;
-  btn.textContent = '⏳ 生成中...';
-  btn.disabled = true;
-
-  try {
-    // 詳細セクションを一時的に開く
-    const detailBody = el('detail-main');
-    const wasOpen = detailBody && detailBody.classList.contains('open');
-    if(detailBody && !wasOpen) {
-      detailBody.classList.add('open');
-      detailBody.style.display = 'block';
-    }
-
-    // グラフ再描画を待つ
-    await new Promise(r => setTimeout(r, 300));
-
-    const resultEl = el('s-result');
-    const canvas = await html2canvas(resultEl, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#FAF9F7',
-      logging: false,
-      windowWidth: 480,
-    });
-
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 8;
-    const imgW = pageW - margin * 2;
-    const imgH = (canvas.height * imgW) / canvas.width;
-
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-
-    let yPos = margin;
-    let remainH = imgH;
-    let srcY = 0;
-
-    while(remainH > 0) {
-      const sliceH = Math.min(remainH, pageH - margin * 2);
-      const sliceCanvas = document.createElement('canvas');
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = (sliceH / imgW) * canvas.width;
-
-      const ctx = sliceCanvas.getContext('2d');
-      ctx.drawImage(canvas, 0, srcY * (canvas.height / imgH), canvas.width, sliceCanvas.height, 0, 0, sliceCanvas.width, sliceCanvas.height);
-
-      const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.92);
-      if(yPos !== margin) { pdf.addPage(); yPos = margin; }
-      pdf.addImage(sliceData, 'JPEG', margin, yPos, imgW, sliceH);
-
-      srcY += sliceH;
-      remainH -= sliceH;
-    }
-
-    // 日付つきファイル名
-    const now = new Date();
-    const fname = '生活設計診断_' + now.getFullYear()
-      + String(now.getMonth()+1).padStart(2,'0')
-      + String(now.getDate()).padStart(2,'0') + '.pdf';
-    pdf.save(fname);
-
-    // 詳細セクションを元に戻す
-    if(detailBody && !wasOpen) {
-      detailBody.classList.remove('open');
-      detailBody.style.display = '';
-    }
-  } catch(e) {
-    alert('PDF生成に失敗しました。ブラウザのPDF保存機能をお使いください。');
-    console.error(e);
-  }
-
-  btn.textContent = origText;
-  btn.disabled = false;
 }
 
 // init
